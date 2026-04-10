@@ -1,0 +1,204 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+# ─────────────────────────────────────────────
+# 1. LOAD DATA
+# ─────────────────────────────────────────────
+df = pd.read_csv("data/sales_data.csv")
+
+print("Dataset Shape:", df.shape)
+print("\nFirst 5 rows:")
+print(df.head())
+print("\nColumn Names:", df.columns.tolist())
+
+# ─────────────────────────────────────────────
+# 2. DATA CLEANING
+# ─────────────────────────────────────────────
+
+# Drop duplicates
+df.drop_duplicates(inplace=True)
+
+# Drop rows with missing values
+df.dropna(inplace=True)
+
+# Standardize column names (lowercase, strip spaces)
+df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+# Convert order_date to datetime if it exists
+if "order_date" in df.columns:
+    df["order_date"] = pd.to_datetime(df["order_date"])
+    df["month"] = df["order_date"].dt.strftime("%b")
+    df["month_num"] = df["order_date"].dt.month
+
+print("\nCleaned Dataset Shape:", df.shape)
+print("\nData Types:")
+print(df.dtypes)
+
+# ─────────────────────────────────────────────
+# 3. EXPLORATORY DATA ANALYSIS (EDA)
+# ─────────────────────────────────────────────
+
+print("\n── Descriptive Statistics ──")
+print(df.describe())
+
+# Identify revenue/sales column dynamically
+revenue_col = next((c for c in df.columns if "revenue" in c or "sales" in c or "amount" in c), None)
+product_col = next((c for c in df.columns if "product" in c or "category" in c), None)
+region_col  = next((c for c in df.columns if "region" in c or "state" in c or "city" in c), None)
+
+print(f"\nDetected → Revenue: '{revenue_col}' | Product: '{product_col}' | Region: '{region_col}'")
+
+# ─────────────────────────────────────────────
+# 4. AGGREGATIONS
+# ─────────────────────────────────────────────
+
+if product_col and revenue_col:
+    product_sales = df.groupby(product_col)[revenue_col].sum().sort_values(ascending=False)
+    print("\nTop Products by Revenue:")
+    print(product_sales.head(10))
+
+if region_col and revenue_col:
+    region_sales = df.groupby(region_col)[revenue_col].sum().sort_values(ascending=False)
+    print("\nRevenue by Region:")
+    print(region_sales)
+
+if "month_num" in df.columns and revenue_col:
+    monthly_revenue = df.groupby(["month_num", "month"])[revenue_col].sum().reset_index()
+    monthly_revenue.sort_values("month_num", inplace=True)
+
+# ─────────────────────────────────────────────
+# 5. VISUALIZATIONS
+# ─────────────────────────────────────────────
+
+os.makedirs("outputs", exist_ok=True)
+
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+fig.suptitle("E-Commerce Sales Analysis", fontsize=16, fontweight="bold", y=1.01)
+fig.tight_layout(pad=5)
+
+# ── Chart 1: Revenue Distribution (Histogram) ──
+if revenue_col:
+    axes[0, 0].hist(df[revenue_col], bins=20, color="#4C9BE8", edgecolor="black")
+    axes[0, 0].set_title("Revenue Distribution")
+    axes[0, 0].set_xlabel("Revenue")
+    axes[0, 0].set_ylabel("Frequency")
+
+# ── Chart 2: Sales by Region (Pie Chart) ──
+if region_col and revenue_col:
+    top_regions = region_sales.head(6)
+    axes[0, 1].pie(
+        top_regions,
+        labels=top_regions.index,
+        autopct="%1.1f%%",
+        colors=["#4C9BE8", "#F4845F", "#F6D860", "#6BCB77", "#B48EAD", "#FF9F45"],
+        startangle=140
+    )
+    axes[0, 1].set_title("Sales by Region")
+
+# ── Chart 3: Top Products by Revenue (Bar Chart) ──
+if product_col and revenue_col:
+    top_products = product_sales.head(10)
+    axes[1, 0].bar(top_products.index, top_products.values, color="#6BCB77", edgecolor="black")
+    axes[1, 0].set_title("Top Products by Revenue")
+    axes[1, 0].set_xlabel("Product")
+    axes[1, 0].set_ylabel("Revenue")
+    axes[1, 0].tick_params(axis="x", rotation=45)
+
+# ── Chart 4: Revenue Over Months (Line Graph) ──
+if "month" in df.columns and revenue_col:
+    axes[1, 1].plot(
+        monthly_revenue["month"],
+        monthly_revenue[revenue_col],
+        marker="o", color="#9B59B6", linestyle="-", linewidth=2
+    )
+    axes[1, 1].set_title("Revenue Over Months")
+    axes[1, 1].set_xlabel("Month")
+    axes[1, 1].set_ylabel("Revenue")
+    axes[1, 1].tick_params(axis="x", rotation=45)
+
+plt.savefig("outputs/sales_dashboard.png", bbox_inches="tight", dpi=150)
+plt.show()
+print("\nDashboard saved → outputs/sales_dashboard.png")
+
+# ── Save individual charts ──
+chart_configs = [
+    ("revenue_distribution", revenue_col, "hist"),
+    ("sales_by_region",      region_col,  "pie"),
+    ("sales_by_product",     product_col, "bar"),
+    ("revenue_over_months",  "month",     "line"),
+]
+
+titles = {
+    "revenue_distribution": "Revenue Distribution",
+    "sales_by_region":      "Sales by Region",
+    "sales_by_product":     "Top Products by Revenue",
+    "revenue_over_months":  "Revenue Over Months",
+}
+
+# Revenue Distribution
+if revenue_col:
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.hist(df[revenue_col], bins=20, color="#4C9BE8", edgecolor="black")
+    ax.set_title("Revenue Distribution"); ax.set_xlabel("Revenue"); ax.set_ylabel("Frequency")
+    plt.tight_layout()
+    plt.savefig("outputs/revenue_distribution.png", dpi=150)
+    plt.close()
+
+# Sales by Region
+if region_col and revenue_col:
+    fig, ax = plt.subplots(figsize=(7, 5))
+    top_regions = region_sales.head(6)
+    ax.pie(top_regions, labels=top_regions.index, autopct="%1.1f%%",
+           colors=["#4C9BE8","#F4845F","#F6D860","#6BCB77","#B48EAD","#FF9F45"], startangle=140)
+    ax.set_title("Sales by Region")
+    plt.tight_layout()
+    plt.savefig("outputs/sales_by_region.png", dpi=150)
+    plt.close()
+
+# Sales by Product
+if product_col and revenue_col:
+    fig, ax = plt.subplots(figsize=(9, 5))
+    top_products = product_sales.head(10)
+    ax.bar(top_products.index, top_products.values, color="#6BCB77", edgecolor="black")
+    ax.set_title("Top Products by Revenue"); ax.set_xlabel("Product"); ax.set_ylabel("Revenue")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig("outputs/sales_by_product.png", dpi=150)
+    plt.close()
+
+# Revenue Over Months
+if "month" in df.columns and revenue_col:
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(monthly_revenue["month"], monthly_revenue[revenue_col],
+            marker="o", color="#9B59B6", linestyle="-", linewidth=2)
+    ax.set_title("Revenue Over Months"); ax.set_xlabel("Month"); ax.set_ylabel("Revenue")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    plt.savefig("outputs/revenue_over_months.png", dpi=150)
+    plt.close()
+
+print("All individual charts saved in outputs/")
+
+# ─────────────────────────────────────────────
+# 6. INSIGHTS SUMMARY
+# ─────────────────────────────────────────────
+
+print("\n════════════════════════════════════")
+print("         KEY INSIGHTS SUMMARY")
+print("════════════════════════════════════")
+
+if product_col and revenue_col:
+    print(f"\n Top Product   : {product_sales.index[0]}  (Revenue: {product_sales.iloc[0]:,.2f})")
+    print(f" Bottom Product: {product_sales.index[-1]} (Revenue: {product_sales.iloc[-1]:,.2f})")
+
+if region_col and revenue_col:
+    print(f"\n Top Region    : {region_sales.index[0]}  (Revenue: {region_sales.iloc[0]:,.2f})")
+    print(f" Lowest Region : {region_sales.index[-1]} (Revenue: {region_sales.iloc[-1]:,.2f})")
+
+if revenue_col:
+    print(f"\n Total Revenue : {df[revenue_col].sum():,.2f}")
+    print(f" Avg Revenue   : {df[revenue_col].mean():,.2f}")
+
+print("\n════════════════════════════════════\n")
